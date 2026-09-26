@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Poste Morse</title>
+<style>
+:root{
+  --bg:#12160f; --panel:#1c2318; --panel-2:#232b1e; --line:#3a4530;
+  --ink:#e8e2ce; --ink-dim:#9aa48c; --brass:#c9903f; --brass-bright:#e3ab5c;
+  --led-off:#3a4530; --led-on:#e3ab5c;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    --bg:#eee9db; --panel:#f6f2e6; --panel-2:#ece5d2; --line:#c9c0a6;
+    --ink:#2a2a20; --ink-dim:#6b6650; --brass:#a5691f; --brass-bright:#8a5518;
+    --led-off:#c9c0a6; --led-on:#a5691f;
+  }
+}
+:root[data-theme="light"]{
+  --bg:#eee9db; --panel:#f6f2e6; --panel-2:#ece5d2; --line:#c9c0a6;
+  --ink:#2a2a20; --ink-dim:#6b6650; --brass:#a5691f; --brass-bright:#8a5518;
+  --led-off:#c9c0a6; --led-on:#a5691f;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:Georgia,'Iowan Old Style','Times New Roman',serif;
+  display:flex; justify-content:center; padding:32px 16px 48px;
+}
+.wrap{width:100%; max-width:620px}
+header{margin-bottom:22px}
+h1{
+  font-size:26px; margin:0 0 4px; font-weight:400; letter-spacing:.3px;
+}
+.sub{color:var(--ink-dim); font-size:14px; margin:0}
+
+.switch{
+  display:flex; border:1px solid var(--line); border-radius:3px; overflow:hidden;
+  margin:20px 0 18px; background:var(--panel-2);
+}
+.switch button{
+  flex:1; padding:11px 8px; background:none; border:none; cursor:pointer;
+  font-family:inherit; font-size:14.5px; color:var(--ink-dim); letter-spacing:.2px;
+}
+.switch button.active{ background:var(--panel); color:var(--brass-bright); font-weight:bold }
+.switch button:not(:last-child){ border-right:1px solid var(--line) }
+
+.panel{
+  background:var(--panel); border:1px solid var(--line); border-radius:4px;
+  padding:22px; position:relative;
+}
+.led{
+  position:absolute; top:18px; right:18px; width:10px; height:10px; border-radius:50%;
+  background:var(--led-off); transition:background .08s, box-shadow .08s;
+}
+.led.on{ background:var(--led-on); box-shadow:0 0 8px 1px var(--led-on) }
+
+label{ display:block; font-size:13px; color:var(--ink-dim); margin:0 0 6px }
+textarea, .filebox{
+  width:100%; background:var(--panel-2); border:1px solid var(--line); border-radius:3px;
+  color:var(--ink); font-family:inherit; font-size:15px; padding:12px; resize:vertical;
+}
+textarea{ min-height:80px }
+textarea:focus, .filebox:focus{ outline:2px solid var(--brass); outline-offset:1px }
+
+.row{ display:flex; gap:16px; margin-top:16px; flex-wrap:wrap }
+.field{ flex:1; min-width:130px }
+.field .val{ font-size:13px; color:var(--brass-bright); font-variant-numeric:tabular-nums }
+input[type=range]{ width:100%; accent-color:var(--brass) }
+
+.morse-out{
+  font-family:ui-monospace,'SF Mono',Consolas,monospace; font-size:16px; line-height:1.9;
+  background:var(--panel-2); border:1px solid var(--line); border-radius:3px;
+  padding:12px; margin-top:14px; min-height:52px; word-break:break-word;
+  color:var(--brass-bright); white-space:pre-wrap;
+}
+
+.actions{ display:flex; gap:10px; margin-top:18px; flex-wrap:wrap }
+button.cta{
+  font-family:inherit; font-size:14.5px; padding:10px 18px; border-radius:3px;
+  border:1px solid var(--brass); background:var(--brass); color:#1c1408; cursor:pointer;
+  font-weight:bold; letter-spacing:.2px;
+}
+button.cta.ghost{ background:none; color:var(--brass-bright) }
+button.cta:disabled{ opacity:.45; cursor:default }
+
+.drop{
+  border:1px dashed var(--line); border-radius:3px; padding:26px 14px; text-align:center;
+  color:var(--ink-dim); font-size:14.5px; cursor:pointer;
+}
+.drop.drag{ border-color:var(--brass); color:var(--brass-bright) }
+.drop input{ display:none }
+.filename{ margin-top:8px; font-size:13px; color:var(--brass-bright) }
+
+.result{
+  margin-top:16px; font-size:18px; padding:14px; background:var(--panel-2);
+  border:1px solid var(--line); border-radius:3px; min-height:28px; word-break:break-word;
+}
+.status{ font-size:13px; color:var(--ink-dim); margin-top:10px; min-height:16px }
+footer{ text-align:center; color:var(--ink-dim); font-size:12px; margin-top:26px }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Poste Morse</h1>
+    <p class="sub">Encoder du texte en signal audio, ou décoder un fichier audio en texte.</p>
+  </header>
+
+  <div class="switch">
+    <button id="tabEnc" class="active">Encodeur</button>
+    <button id="tabDec">Décodeur</button>
+  </div>
+
+  <section id="panelEnc" class="panel">
+    <div class="led" id="ledEnc"></div>
+    <label for="txt">Texte à transmettre</label>
+    <textarea id="txt" placeholder="SOS APPEL DE TEST">SOS APPEL DE TEST</textarea>
+
+    <div class="row">
+      <div class="field">
+        <label>Vitesse — <span class="val" id="wpmVal">18</span> mots/min</label>
+        <input type="range" id="wpm" min="5" max="40" value="18">
+      </div>
+      <div class="field">
+        <label>Tonalité — <span class="val" id="freqVal">700</span> Hz</label>
+        <input type="range" id="freq" min="300" max="1000" step="10" value="700">
+      </div>
+    </div>
+
+    <div class="morse-out" id="morseOut">... --- ...</div>
+
+    <div class="actions">
+      <button class="cta" id="playBtn">▶ Écouter</button>
+      <button class="cta ghost" id="stopBtn" disabled>■ Arrêter</button>
+      <button class="cta ghost" id="dlBtn">⇩ Télécharger le .wav</button>
+    </div>
+    <div class="status" id="encStatus"></div>
+  </section>
+
+  <section id="panelDec" class="panel" style="display:none">
+    <div class="led" id="ledDec"></div>
+    <label>Fichier audio (morse enregistré)</label>
+    <div class="drop" id="drop">
+      Glissez un fichier ici, ou touchez pour en choisir un
+      <input type="file" id="fileInput" accept="audio/*">
+      <div class="filename" id="filename"></div>
+    </div>
+
+    <div class="actions">
+      <button class="cta" id="decodeBtn" disabled>Décoder</button>
+    </div>
+    <div class="status" id="decStatus"></div>
+    <div class="result" id="decResult">Le texte décodé apparaîtra ici.</div>
+  </section>
+
+  <footer>Norme PARIS — 1 unité = 1,2 / vitesse(mots·min⁻¹) seconde.</footer>
+</div>
+
+<script>
+const MORSE = {A:'.-',B:'-...',C:'-.-.',D:'-..',E:'.',F:'..-.',G:'--.',H:'....',I:'..',J:'.---',
+K:'-.-',L:'.-..',M:'--',N:'-.',O:'---',P:'.--.',Q:'--.-',R:'.-.',S:'...',T:'-',U:'..-',V:'...-',
+W:'.--',X:'-..-',Y:'-.--',Z:'--..','0':'-----','1':'.----','2':'..---','3':'...--','4':'....-',
+'5':'.....','6':'-....','7':'--...','8':'---..','9':'----.','.':'.-.-.-',',':'--..--','?':'..--..',
+"'":'.----.','!':'-.-.--','/':'-..-.','(':'-.--.',')':'-.--.-','&':'.-...',':':'---...',
+';':'-.-.-.','=':'-...-','+':'.-.-.','-':'-....-','_':'..--.-','"':'.-..-.','@':'.--.-.'};
+const REVERSE = Object.fromEntries(Object.entries(MORSE).map(([k,v])=>[v,k]));
+
+// ---------- Tabs ----------
+const tabEnc=document.getElementById('tabEnc'), tabDec=document.getElementById('tabDec');
+const panelEnc=document.getElementById('panelEnc'), panelDec=document.getElementById('panelDec');
+tabEnc.onclick=()=>{tabEnc.classList.add('active');tabDec.classList.remove('active');panelEnc.style.display='';panelDec.style.display='none';};
+tabDec.onclick=()=>{tabDec.classList.add('active');tabEnc.classList.remove('active');panelDec.style.display='';panelEnc.style.display='none';};
+
+// ---------- Encoder ----------
+const txt=document.getElementById('txt'), wpm=document.getElementById('wpm'), freq=document.getElementById('freq');
+const wpmVal=document.getElementById('wpmVal'), freqVal=document.getElementById('freqVal');
+const morseOut=document.getElementById('morseOut'), ledEnc=document.getElementById('ledEnc');
+const playBtn=document.getElementById('playBtn'), stopBtn=document.getElementById('stopBtn'), dlBtn=document.getElementById('dlBtn');
+const encStatus=document.getElementById('encStatus');
+
+function textToMorse(str){
+  return str.toUpperCase().trim().split(/\s+/).map(word=>
+    word.split('').map(ch=>MORSE[ch]||'').filter(Boolean).join(' ')
+  ).join(' / ');
+}
+function updateMorsePreview(){ morseOut.textContent = textToMorse(txt.value) || '—'; }
+txt.addEventListener('input', updateMorsePreview);
+wpm.addEventListener('input', ()=>wpmVal.textContent=wpm.value);
+freq.addEventListener('input', ()=>freqVal.textContent=freq.value);
+updateMorsePreview();
+
+// Build a list of {on, dur} segments in seconds
+function buildSegments(str, wpmValNum){
+  const unit = 1.2/wpmValNum;
+  const segs=[];
+  const words = str.toUpperCase().trim().split(/\s+/);
+  words.forEach((word,wi)=>{
+    word.split('').forEach((ch,ci)=>{
+      const code = MORSE[ch];
+      if(!code) return;
+      code.split('').forEach((sym,si)=>{
+        segs.push({on:true, dur: (sym==='.'?1:3)*unit});
+        if(si < code.length-1) segs.push({on:false, dur: unit});
+      });
+      if(ci < word.length-1) segs.push({on:false, dur: 3*unit});
+    });
+    if(wi < words.length-1) segs.push({on:false, dur: 7*unit});
+  });
+  return segs;
+}
+
+function renderAudioBuffer(segs, freqHz, sampleRate){
+  const total = segs.reduce((s,g)=>s+g.dur,0) || 0.1;
+  const n = Math.max(1, Math.ceil(total*sampleRate));
+  const data = new Float32Array(n);
+  let pos = 0;
+  const ramp = Math.floor(sampleRate*0.005);
+  segs.forEach(seg=>{
+    const len = Math.floor(seg.dur*sampleRate);
+    if(seg.on){
+      for(let i=0;i<len;i++){
+        let amp = 1;
+        if(i<ramp) amp = i/ramp;
+        else if(i>len-ramp) amp = (len-i)/ramp;
+        data[pos+i] = Math.sin(2*Math.PI*freqHz*(i/sampleRate)) * amp * 0.6;
+      }
+    }
+    pos += len;
+  });
+  return data;
+}
+
+function floatToWavBlob(float32, sampleRate){
+  const buffer = new ArrayBuffer(44 + float32.length*2);
+  const view = new DataView(buffer);
+  function writeStr(off,s){ for(let i=0;i<s.length;i++) view.setUint8(off+i, s.charCodeAt(i)); }
+  writeStr(0,'RIFF'); view.setUint32(4, 36+float32.length*2, true);
+  writeStr(8,'WAVE'); writeStr(12,'fmt ');
+  view.setUint32(16,16,true); view.setUint16(20,1,true); view.setUint16(22,1,true);
+  view.setUint32(24,sampleRate,true); view.setUint32(28,sampleRate*2,true);
+  view.setUint16(32,2,true); view.setUint16(34,16,true);
+  writeStr(36,'data'); view.setUint32(40, float32.length*2, true);
+  let off=44;
+  for(let i=0;i<float32.length;i++){
+    const s = Math.max(-1, Math.min(1, float32[i]));
+    view.setInt16(off, s<0 ? s*0x8000 : s*0x7FFF, true);
+    off+=2;
+  }
+  return new Blob([view], {type:'audio/wav'});
+}
+
+let audioCtx=null, playSource=null, ledTimer=null;
+function ensureCtx(){ if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)(); return audioCtx; }
+
+function stopPlayback(){
+  if(playSource){ try{playSource.stop();}catch(e){} playSource=null; }
+  if(ledTimer){ clearTimeout(ledTimer); ledTimer=null; }
+  ledEnc.classList.remove('on');
+  playBtn.disabled=false; stopBtn.disabled=true;
+}
+
+playBtn.onclick = ()=>{
+  const str = txt.value.trim();
+  if(!str){ encStatus.textContent='Entrez un texte à transmettre.'; return; }
+  const ctx = ensureCtx();
+  const sampleRate = ctx.sampleRate;
+  const segs = buildSegments(str, +wpm.value);
+  const data = renderAudioBuffer(segs, +freq.value, sampleRate);
+  const buf = ctx.createBuffer(1, data.length, sampleRate);
+  buf.copyToChannel(data, 0);
+  const src = ctx.createBufferSource();
+  src.buffer = buf; src.connect(ctx.destination);
+  playSource = src;
+  playBtn.disabled=true; stopBtn.disabled=false;
+  encStatus.textContent='Transmission en cours…';
+
+  // Blink LED per segment
+  let t = ctx.currentTime;
+  segs.forEach(seg=>{
+    if(seg.on){
+      const delayOn = (t-ctx.currentTime)*1000;
+      setTimeout(()=>ledEnc.classList.add('on'), Math.max(0,delayOn));
+      setTimeout(()=>ledEnc.classList.remove('on'), Math.max(0,delayOn)+seg.dur*1000);
+    }
+    t += seg.dur;
+  });
+  src.start();
+  src.onended = ()=>{ stopPlayback(); encStatus.textContent='Transmission terminée.'; };
+};
+stopBtn.onclick = stopPlayback;
+
+dlBtn.onclick = ()=>{
+  const str = txt.value.trim();
+  if(!str){ encStatus.textContent='Entrez un texte à transmettre.'; return; }
+  const sampleRate = 44100;
+  const segs = buildSegments(str, +wpm.value);
+  const data = renderAudioBuffer(segs, +freq.value, sampleRate);
+  const blob = floatToWavBlob(data, sampleRate);
+  saveFile(blob, 'morse.wav');
+};
+
+async function saveFile(blob, filename){
+  let downloads=null;
+  try{ if(window.claude && window.claude.use) downloads = await window.claude.use('downloads'); }catch(e){}
+  if(downloads){
+    try{
+      const buf = await blob.arrayBuffer();
+      await downloads.save({filename, data: buf});
+      encStatus.textContent='Fichier proposé au téléchargement.';
+      return;
+    }catch(e){ /* fall through to plain link */ }
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download=filename; document.body.appendChild(a); a.click();
+  a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 2000);
+}
+
+// ---------- Decoder ----------
+const drop=document.getElementById('drop'), fileInput=document.getElementById('fileInput');
+const filenameEl=document.getElementById('filename'), decodeBtn=document.getElementById('decodeBtn');
+const decStatus=document.getElementById('decStatus'), decResult=document.getElementById('decResult');
+const ledDec=document.getElementById('ledDec');
+let pendingFile=null;
+
+drop.addEventListener('click', ()=>fileInput.click());
+fileInput.addEventListener('change', e=>{ if(e.target.files[0]) setFile(e.target.files[0]); });
+['dragover','dragenter'].forEach(ev=>drop.addEventListener(ev, e=>{e.preventDefault();drop.classList.add('drag');}));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev, e=>{e.preventDefault();drop.classList.remove('drag');}));
+drop.addEventListener('drop', e=>{ if(e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]); });
+
+function setFile(f){
+  pendingFile=f; filenameEl.textContent=f.name; decodeBtn.disabled=false;
+  decStatus.textContent=''; decResult.textContent='Le texte décodé apparaîtra ici.';
+}
+
+function kmeans1D(values, k){
+  if(values.length===0) return [];
+  let sorted=[...values].sort((a,b)=>a-b);
+  let centers=[];
+  for(let i=0;i<k;i++) centers.push(sorted[Math.floor((i+0.5)*sorted.length/k)]);
+  for(let iter=0; iter<12; iter++){
+    const groups = Array.from({length:k},()=>[]);
+    values.forEach(v=>{
+      let bi=0, bd=Infinity;
+      centers.forEach((c,i)=>{ const d=Math.abs(v-c); if(d<bd){bd=d;bi=i;} });
+      groups[bi].push(v);
+    });
+    centers = centers.map((c,i)=> groups[i].length ? groups[i].reduce((a,b)=>a+b,0)/groups[i].length : c);
+  }
+  return centers.sort((a,b)=>a-b);
+}
+
+function decodeAudioBuffer(audioBuffer){
+  const sampleRate = audioBuffer.sampleRate;
+  const ch0 = audioBuffer.getChannelData(0);
+  let data = ch0;
+  if(audioBuffer.numberOfChannels>1){
+    const ch1 = audioBuffer.getChannelData(1);
+    data = new Float32Array(ch0.length);
+    for(let i=0;i<ch0.length;i++) data[i]=(ch0[i]+ch1[i])/2;
+  }
+  // envelope via windowed RMS
+  const winSize = Math.max(1, Math.round(sampleRate*0.004));
+  const nWin = Math.ceil(data.length/winSize);
+  const env = new Float32Array(nWin);
+  for(let w=0; w<nWin; w++){
+    const start=w*winSize, end=Math.min(data.length, start+winSize);
+    let sum=0; for(let i=start;i<end;i++) sum += data[i]*data[i];
+    env[w] = Math.sqrt(sum/(end-start));
+  }
+  let peak=0; for(let i=0;i<env.length;i++) if(env[i]>peak) peak=env[i];
+  if(peak < 1e-6) return {text:'', error:'Aucun signal détecté dans ce fichier.'};
+  const threshold = peak*0.28;
+  const binary = new Uint8Array(nWin);
+  for(let i=0;i<nWin;i++) binary[i] = env[i]>threshold ? 1 : 0;
+
+  // runs
+  const runs=[]; // {on, len(windows)}
+  let cur=binary[0], len=0;
+  for(let i=0;i<nWin;i++){
+    if(binary[i]===cur){ len++; }
+    else { runs.push({on:!!cur, len}); cur=binary[i]; len=1; }
+  }
+  runs.push({on:!!cur, len});
+  const winSec = winSize/sampleRate;
+  const onRuns = runs.filter(r=>r.on).map(r=>r.len*winSec);
+  const offRuns = runs.filter(r=>!r.on).map(r=>r.len*winSec);
+  if(onRuns.length===0) return {text:'', error:'Aucune tonalité détectée — vérifiez le fichier.'};
+
+  // classify dot/dash
+  let unit;
+  if(onRuns.length>=2){
+    const centers = kmeans1D(onRuns, Math.min(2, new Set(onRuns.map(v=>v.toFixed(3))).size));
+    if(centers.length===2) unit = (centers[0] + centers[1]/3)/2;
+    else unit = centers[0];
+  } else {
+    unit = onRuns[0];
+  }
+  if(!unit || unit<=0) unit = Math.min(...onRuns);
+
+  // build symbol stream in original order
+  let output='', symbol='';
+  runs.forEach(r=>{
+    const dur = r.len*winSec;
+    if(r.on){
+      symbol += (dur > unit*1.8) ? '-' : '.';
+    } else {
+      if(dur > unit*4.5){
+        if(symbol){ output += (REVERSE[symbol]||'?'); symbol=''; }
+        output += ' ';
+      } else if(dur > unit*1.8){
+        if(symbol){ output += (REVERSE[symbol]||'?'); symbol=''; }
+      }
+      // else: intra-character gap, keep building symbol
+    }
+  });
+  if(symbol) output += (REVERSE[symbol]||'?');
+  return {text: output.trim().replace(/ +/g,' '), error:null};
+}
+
+decodeBtn.onclick = async ()=>{
+  if(!pendingFile) return;
+  decodeBtn.disabled=true;
+  decStatus.textContent='Analyse du signal…';
+  ledDec.classList.add('on');
+  try{
+    const ctx = ensureCtx();
+    const arrayBuf = await pendingFile.arrayBuffer();
+    const audioBuffer = await ctx.decodeAudioData(arrayBuf.slice(0));
+    const {text, error} = decodeAudioBuffer(audioBuffer);
+    if(error){ decStatus.textContent=error; decResult.textContent='—'; }
+    else {
+      decStatus.textContent='Décodage terminé.';
+      decResult.textContent = text || '(vide)';
+    }
+  }catch(e){
+    decStatus.textContent="Impossible de lire ce fichier audio.";
+  }
+  ledDec.classList.remove('on');
+  decodeBtn.disabled=false;
+};
+</script>
+</body>
+</html>
